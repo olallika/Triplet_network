@@ -1,0 +1,7 @@
+TRAINING
+  - train[...]1.txt
+  - train[...]2.txt
+  - train[...]3.txt
+  
+TESTING
+  - [...]_val.txt
