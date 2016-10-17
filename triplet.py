@@ -23,7 +23,7 @@ def main():
 	train_niter = 5000
 	test_interval = 1000
 	test_nimages = 10000
-	train_images = 60000
+	train_nimages = 60000
 
 	RESULTS_DIR = '../../results/triplet_' + network + '_' + dataset + '/'
 	SOLVER_DIR = './data/' + network + '_' + dataset + '_solver.prototxt'
@@ -58,13 +58,13 @@ def main():
 		# # TRAIN AND VALIDATION FILES
 		# file_path = './data/triplets/'
 		# file_name = network + '_' + dataset + '_' + 'train_'
-		# num_images = train_images / 3
+		# num_images = train_nimages / 3
 		# createTXTfiles(mnist_dataset_path_train, num_images, file_path, file_name)
 		# file_name = network + '_' + dataset + '_' + 'val_'
 		# num_images = test_nimages / 3
 		# createTXTfiles(mnist_dataset_path_val, num_images, file_path, file_name)
-
-		# TEST FILE
+		#
+		# # TEST FILE
 		# train_images, train_labels = load_mnist('training', digits=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 		#                                         path=mnist_dataset_path)
 		# test_images, test_labels = load_mnist('testing', digits=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -156,18 +156,18 @@ def main():
 							name = directory + 'Loss_it_' + str(it) + '.jpg'
 							plotLoss(Loss_train, Loss_val, train_niter, name)
 
-				# # KNN
-				# for i in range(0, test_batch, 1):
-				# 	# images from the last testing batch
-				# 	feats = TEST.blobs['feat'].data[i]
-				# 	im = TEST.blobs['data'].data[i]
-				# 	# Ask who is the closest images to feats
-				# 	[dist, ind] = neigh.kneighbors(feats.reshape(dim))
-				# 	folder = directory + 'neighbors/' + str(it) + '/'
-				# 	if not os.path.exists(folder):
-				# 		os.makedirs(folder)
-				# 	plotNeighbors(dataset, im, ind[0], images, n_neighbors, folder, i, it)
-				#
+				# KNN
+				for i in range(0, test_batch, 1):
+					# images from the last testing batch
+					feats = TEST.blobs['feat'].data[i]
+					im = TEST.blobs['data'].data[i]
+					# Ask who is the closest images to feats
+					[dist, ind] = neigh.kneighbors(feats.reshape(dim))
+					folder = directory + 'neighbors/' + str(it) + '/'
+					if not os.path.exists(folder):
+						os.makedirs(folder)
+					plotNeighbors(dataset, im, ind[0], images, n_neighbors, folder, i, it)
+
 				# #########################################################################################
 				# # Plot precision and recall curves
 				# MODEL = './data/snapshots/' + dataset + '_triplet_iter_' + str(train_niter) + '.caffemodel'

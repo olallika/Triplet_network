@@ -1,0 +1,609 @@
+name: "caffenet_mnist_net_curves"
+layer {
+  name: "data_p"
+  type: "ImageData"
+  top: "data_p"
+  top: "sim_p"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 64
+  }
+}
+layer {
+  name: "data"
+  type: "ImageData"
+  top: "data"
+  top: "sim"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 64
+  }
+}
+layer {
+  name: "data_n"
+  type: "ImageData"
+  top: "data_n"
+  top: "sim_n"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 64
+  }
+}
+layer {
+  name: "data_p"
+  type: "ImageData"
+  top: "data_p"
+  top: "sim_p"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 128
+  }
+}
+layer {
+  name: "data"
+  type: "ImageData"
+  top: "data"
+  top: "sim"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 128
+  }
+}
+layer {
+  name: "data_n"
+  type: "ImageData"
+  top: "data_n"
+  top: "sim_n"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.00390625
+    mirror: false
+  }
+  image_data_param {
+    source: "./data/triplets/mnist_val.txt"
+    batch_size: 128
+  }
+}
+layer {
+  name: "conv1"
+  type: "Convolution"
+  bottom: "data"
+  top: "conv1"
+  param {
+    name: "conv1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv1_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 20
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool1"
+  type: "Pooling"
+  bottom: "conv1"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv2"
+  type: "Convolution"
+  bottom: "pool1"
+  top: "conv2"
+  param {
+    name: "conv2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv2_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 50
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool2"
+  type: "Pooling"
+  bottom: "conv2"
+  top: "pool2"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "ip1"
+  type: "InnerProduct"
+  bottom: "pool2"
+  top: "ip1"
+  param {
+    name: "ip1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip1_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 500
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu1"
+  type: "ReLU"
+  bottom: "ip1"
+  top: "ip1"
+}
+layer {
+  name: "ip2"
+  type: "InnerProduct"
+  bottom: "ip1"
+  top: "ip2"
+  param {
+    name: "ip2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip2_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "feat"
+  type: "InnerProduct"
+  bottom: "ip2"
+  top: "feat"
+  param {
+    name: "feat_w"
+    lr_mult: 1
+  }
+  param {
+    name: "feat_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 128
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: 'feat_norm'
+  type: 'Python'
+  bottom: 'feat'
+  top: 'feat_norm'
+  python_param {
+    module: 'L2norm'
+    layer: 'L2NormLayer'
+  }
+}
+layer {
+  name: "conv1_true"
+  type: "Convolution"
+  bottom: "data_p"
+  top: "conv1_true"
+  param {
+    name: "conv1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv1_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 20
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool1_true"
+  type: "Pooling"
+  bottom: "conv1_true"
+  top: "pool1_true"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv2_true"
+  type: "Convolution"
+  bottom: "pool1_true"
+  top: "conv2_true"
+  param {
+    name: "conv2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv2_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 50
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool2_true"
+  type: "Pooling"
+  bottom: "conv2_true"
+  top: "pool2_true"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "ip1_true"
+  type: "InnerProduct"
+  bottom: "pool2_true"
+  top: "ip1_true"
+  param {
+    name: "ip1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip1_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 500
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu1_true"
+  type: "ReLU"
+  bottom: "ip1_true"
+  top: "ip1_true"
+}
+layer {
+  name: "ip2_true"
+  type: "InnerProduct"
+  bottom: "ip1_true"
+  top: "ip2_true"
+  param {
+    name: "ip2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip2_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "feat_true"
+  type: "InnerProduct"
+  bottom: "ip2_true"
+  top: "feat_true"
+  param {
+    name: "feat_w"
+    lr_mult: 1
+  }
+  param {
+    name: "feat_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 128
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: 'feat_true_norm'
+  type: 'Python'
+  bottom: 'feat_true'
+  top: 'feat_true_norm'
+  python_param {
+    module: 'L2norm'
+    layer: 'L2NormLayer'
+  }
+}
+layer {
+  name: "conv1_false"
+  type: "Convolution"
+  bottom: "data_n"
+  top: "conv1_false"
+  param {
+    name: "conv1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv1_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 20
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool1_false"
+  type: "Pooling"
+  bottom: "conv1_false"
+  top: "pool1_false"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "conv2_false"
+  type: "Convolution"
+  bottom: "pool1_false"
+  top: "conv2_false"
+  param {
+    name: "conv2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "conv2_b"
+    lr_mult: 2
+  }
+  convolution_param {
+    num_output: 50
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "pool2_false"
+  type: "Pooling"
+  bottom: "conv2_false"
+  top: "pool2_false"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
+layer {
+  name: "ip1_false"
+  type: "InnerProduct"
+  bottom: "pool2_false"
+  top: "ip1_false"
+  param {
+    name: "ip1_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip1_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 500
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu1_false"
+  type: "ReLU"
+  bottom: "ip1_false"
+  top: "ip1_false"
+}
+layer {
+  name: "ip2_false"
+  type: "InnerProduct"
+  bottom: "ip1_false"
+  top: "ip2_false"
+  param {
+    name: "ip2_w"
+    lr_mult: 1
+  }
+  param {
+    name: "ip2_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "feat_false"
+  type: "InnerProduct"
+  bottom: "ip2_false"
+  top: "feat_false"
+  param {
+    name: "feat_w"
+    lr_mult: 1
+  }
+  param {
+    name: "feat_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 128
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: 'feat_false_norm'
+  type: 'Python'
+  bottom: 'feat_false'
+  top: 'feat_false_norm'
+  python_param {
+    module: 'L2norm'
+    layer: 'L2NormLayer'
+  }
+}
+layer {
+  name: 'distance_p'
+  type: 'Python'
+  bottom: 'feat_norm'
+  bottom: 'feat_true_norm'
+  top: 'distance_p'
+  python_param {
+    module: 'distance'
+    layer: 'DistanceLayer'
+  }
+}
+layer {
+  name: 'distance_n'
+  type: 'Python'
+  bottom: 'feat_norm'
+  bottom: 'feat_false_norm'
+  top: 'distance_n'
+  python_param {
+    module: 'distance'
+    layer: 'DistanceLayer'
+  }
+}
+layer {
+  name: 'loss'
+  type: 'Python'
+  bottom: 'distance_p'
+  bottom: 'distance_n'
+  top: 'loss'
+  python_param {
+    module: 'facesLoss'
+    layer: 'FacesLossLayer'
+    param_str: "'num': 0.2"
+  }
+  loss_weight: 1
+}
