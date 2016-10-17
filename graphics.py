@@ -1,14 +1,151 @@
+import scipy.misc as misc
+from scipy.spatial import distance
 import caffe
 from pylab import *
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.misc as misc
 from evaluation import PR_curve
-from functions import transformImage, load_mnist
-from scipy.spatial import distance
-from functions import load_images
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
+import cPickle
+import os, struct
+from array import array as pyarray
+
+
+def load_mnist(dataset="training", digits=np.arange(10), path="."):
+	"""
+	Loads MNIST files into 3D numpy arrays
+
+	Adapted from: http://abel.ee.ucla.edu/cvxopt/_downloads/mnist.py
+	"""
+
+	if dataset is "training":
+		fname_img = os.path.join(path, 'train-images.idx3-ubyte')
+		fname_lbl = os.path.join(path, 'train-labels.idx1-ubyte')
+	elif dataset is "testing":
+		fname_img = os.path.join(path, 't10k-images.idx3-ubyte')
+		fname_lbl = os.path.join(path, 't10k-labels.idx1-ubyte')
+	else:
+		raise ValueError, "dataset must be 'testing' or 'training'"
+
+	flbl = open(fname_lbl, 'rb')
+	magic_nr, size = struct.unpack(">II", flbl.read(8))
+	lbl = pyarray("b", flbl.read())
+	flbl.close()
+
+	fimg = open(fname_img, 'rb')
+	magic_nr, size, rows, cols = struct.unpack(">IIII", fimg.read(16))
+	img = pyarray("B", fimg.read())
+	fimg.close()
+
+	ind = [k for k in range(size) if lbl[k] in digits]
+	N = len(ind)
+
+	images = zeros((N, rows, cols), dtype=uint8)
+	labels = zeros((N, 1), dtype=int8)
+	for i in range(len(ind)):
+		images[i] = np.array(img[ind[i] * rows * cols: (ind[i] + 1) * rows * cols]).reshape((rows, cols))
+		labels[i] = lbl[ind[i]]
+
+	# im = np.array([np.tile(images[i], (1, 1)) for j in xrange(3)])
+	# aux = misc.toimage(im)
+	# aux = misc.toimage(images[i])
+	#
+	# name = "/home/olaia.artieda/TFM/DATASETS/MNIST/" + dataset + "/" + str(labels[i, 0]) + "/" + str(i) + ".png"
+	# aux.save(name)
+
+	return images, labels
+
+
+def unpickle(file):
+	fo = open(file, 'rb')
+	dict = cPickle.load(fo)
+	fo.close()
+	return dict
+
+
+def load_cifar10(dataset_path, aux):
+	images = []
+	norm_images = []
+	labels = []
+
+	image_size = 32
+	mean_image = np.zeros((image_size, image_size, 3))
+	mean = []
+
+	# nearest neighbors
+	testing_labels = 0
+	testing_images = []
+
+	if aux == 'training':
+		for i in range(1, 6, 1):
+			dict = unpickle(dataset_path + 'data_batch_' + str(i))
+
+			num_images = dict['data'].shape[0]
+			for ii in range(num_images):
+				img = dict['data'][ii].reshape((3, image_size, image_size))
+				label = dict['labels'][ii]
+				rgb_img = ndarray.transpose(img, (2, 1, 0))
+				# image = misc.toimage(rgb_img)
+				# image = image.rotate(-90)
+				# image.save(dataset_path + aux + '/' + str(label) + '/' + str(ii) + '.png')
+				images.append(rgb_img)
+				labels.append(label)
+
+				# Create mean image
+				mean_image[:, :, 0] += rgb_img[:, :, 0]
+				mean_image[:, :, 1] += rgb_img[:, :, 1]
+				mean_image[:, :, 2] += rgb_img[:, :, 2]
+
+			mean.append(mean_image / ii * i)
+
+	elif aux == 'testing':
+		dict = unpickle(dataset_path + 'test_batch')
+		num_images = dict['data'].shape[0]
+		for ii in range(num_images):
+			img = dict['data'][ii].reshape((3, image_size, image_size))
+			label = dict['labels'][ii]
+			rgb_img = ndarray.transpose(img, (2, 1, 0))
+			# image = misc.toimage(rgb_img)
+			# image = image.rotate(-90)
+			# image.save(dataset_path + aux + '/' + str(label) + '/' + str(ii) + '.png')
+			images.append(rgb_img)
+			labels.append(label)
+
+			# Create mean image
+			mean_image[:, :, 0] += rgb_img[:, :, 0]
+			mean_image[:, :, 1] += rgb_img[:, :, 1]
+			mean_image[:, :, 2] += rgb_img[:, :, 2]
+
+		mean.append(mean_image / ii)
+
+	return images, labels, mean
+
+
+def load_images(path):
+	folders = os.listdir(path)
+	txt_file = open('./data/triplets/curves.txt', 'w')
+
+	num_images = 0
+	images = []
+	labels = []
+
+	for folder in folders:
+		class_path = path + folder + '/'
+		class_images = os.listdir(class_path)
+
+		for image in class_images:
+			txt_file.write(class_path + image + ' ' + str(folder) + '\n')
+
+			image = imread(class_path + image)
+			images.append(image)
+			labels.append(folder)
+
+			num_images += 1
+
+	txt_file.close()
+
+	return txt_file, images, labels
 
 
 def saveAcc(total_iter, train_loss, test_interval, test_acc, col, it, const, actual_epoch):

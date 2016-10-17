@@ -1,13 +1,54 @@
-from random import choice
-import os
 import struct
 from array import array as pyarray
 import cPickle
+import caffe
+from random import choice
 from pylab import *
-import scipy.misc as misc
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn import metrics
+import scipy.misc as misc
+import os
+from sklearn.neighbors import NearestNeighbors
+from PIL import Image
+from graphics import plotMeanCurves, plotNeighbors
+
+
+def pretrainedEmbedding(model_def, model_weights, RESULTS_DIR, image_path, test_batch, n_neighbours, dataset,
+                        dataset_path_val):
+	network = caffe.Net(model_def, model_weights, caffe.TEST)
+
+	# K-NEAREST-NEIGHBOURS
+	feat_matrix = []
+	images = []
+	label_matrix = []
+	it = 0
+	[feat_matrix, _, _, dim, images] = createFeatureMatrix(feat_matrix, images, label_matrix, network, test_batch)
+	neigh = NearestNeighbors(n_neighbours)
+	neigh.fit(feat_matrix)
+
+	# load image and prepare as a single input batch for Caffe
+	im = np.array(Image.open(image_path))
+	im_input = im[np.newaxis, np.newaxis, :, :]
+	network.blobs['data'].reshape(*im_input.shape)
+	network.blobs['data'].data[...] = im_input
+
+	network.forward()
+
+	for i in range(0, test_batch, 1):
+		# images from the last testing batch
+		feats = network.blobs['feat'].data[i]
+		im = network.blobs['data'].data[i]
+		# Ask who is the closest images to feats
+		[dist, ind] = neigh.kneighbors(feats.reshape(dim))
+		folder = RESULTS_DIR + 'siamese_neighbors/' + str(it) + '/'
+		if not os.path.exists(folder):
+			os.makedirs(folder)
+		plotNeighbors(dataset, im, ind[0], images, n_neighbours, folder, i, it)
+
+	# Plot precision and recall curves
+	path_curves = RESULTS_DIR + dataset + 'meanPR_AUC_curves.png'
+	class_AUC = plotMeanCurves(model_weights, model_def, path_curves, dataset_path_val)
+
+	return class_AUC
 
 
 def printInfo(solver):
@@ -126,64 +167,34 @@ def transformImage(image, Train=1):
 	return image
 
 
-def createTXTfiles(MEME_images, num_train, folder_files, flag, net):
-	train1 = open(folder_files + flag + '1.txt', 'w')
-	train2 = open(folder_files + flag + '2.txt', 'w')
+def createTXTfiles(images_path, num_images, file_path, file_name):
+	train0 = open(file_path + file_name + '0.txt', 'w')
+	train1 = open(file_path + file_name + '1.txt', 'w')
+	train2 = open(file_path + file_name + '2.txt', 'w')
 
-	if net == 'siamese':
+	for i in range(0, num_images, 1):
+		aux_folders = os.listdir(images_path)
+		# Reference image
+		folder = choice(aux_folders)
+		path = images_path + folder + '/'
+		memes = os.listdir(path)
+		ref_img = choice(memes)
+		train0.write(path + ref_img + ' ' + str(2) + '\n')
 
-		for i in range(0, num_train, 1):
-			folders = os.listdir(MEME_images)
-			# Positive pair
-			folder = choice(folders)
-			path = MEME_images + folder + '/'
-			memes = os.listdir(path)
-			pos_pair1 = choice(memes)
-			train1.write(path + pos_pair1 + ' ' + str(1) + '\n')
-			pos_pair2 = choice(memes)
-			train2.write(path + pos_pair2 + ' ' + str(1) + '\n')
+		# Positive instance
+		memes.remove(ref_img)
+		pos_ins = choice(memes)
+		train1.write(path + pos_ins + ' ' + str(1) + '\n')
 
-			# Negative pair
-			folder = choice(folders)
-			path = MEME_images + folder + '/'
-			memes = os.listdir(path)
-			neg_pair1 = choice(memes)
-			train1.write(path + neg_pair1 + ' ' + str(0) + '\n')
-			folders.remove(folder)
-			folder = choice(folders)
-			path = MEME_images + folder + '/'
-			memes = os.listdir(path)
-			neg_pair2 = choice(memes)
-			train2.write(path + neg_pair2 + ' ' + str(0) + '\n')
+		# Negative instance
+		aux_folders.remove(folder)
+		folder = choice(aux_folders)
+		path = images_path + folder + '/'
+		memes = os.listdir(path)
+		neg_ins = choice(memes)
+		train2.write(path + neg_ins + ' ' + str(0) + '\n')
 
-	elif net == 'triplet':
-
-		train0 = open(folder_files + flag + '0.txt', 'w')
-
-		for i in range(0, num_train, 1):
-			aux_folders = os.listdir(MEME_images)
-			# Reference image
-			folder = choice(aux_folders)
-			path = MEME_images + folder + '/'
-			memes = os.listdir(path)
-			ref_img = choice(memes)
-			train0.write(path + ref_img + ' ' + str(2) + '\n')
-
-			# Positive instance
-			memes.remove(ref_img)
-			pos_ins = choice(memes)
-			train1.write(path + pos_ins + ' ' + str(1) + '\n')
-
-			# Negative instance
-			aux_folders.remove(folder)
-			folder = choice(aux_folders)
-			path = MEME_images + folder + '/'
-			memes = os.listdir(path)
-			neg_ins = choice(memes)
-			train2.write(path + neg_ins + ' ' + str(0) + '\n')
-
-		train0.close()
-
+	train0.close()
 	train1.close()
 	train2.close()
 
@@ -226,142 +237,6 @@ def createFeatureMatrix(feat_matrix, NET, train_batch, it):
 	return feat_matrix, label_matrix, prediction_example, dim, images
 
 
-def load_mnist(dataset="training", digits=np.arange(10), path="."):
-	"""
-	Loads MNIST files into 3D numpy arrays
-
-	Adapted from: http://abel.ee.ucla.edu/cvxopt/_downloads/mnist.py
-	"""
-
-	if dataset is "training":
-		fname_img = os.path.join(path, 'train-images.idx3-ubyte')
-		fname_lbl = os.path.join(path, 'train-labels.idx1-ubyte')
-	elif dataset is "testing":
-		fname_img = os.path.join(path, 't10k-images.idx3-ubyte')
-		fname_lbl = os.path.join(path, 't10k-labels.idx1-ubyte')
-	else:
-		raise ValueError, "dataset must be 'testing' or 'training'"
-
-	flbl = open(fname_lbl, 'rb')
-	magic_nr, size = struct.unpack(">II", flbl.read(8))
-	lbl = pyarray("b", flbl.read())
-	flbl.close()
-
-	fimg = open(fname_img, 'rb')
-	magic_nr, size, rows, cols = struct.unpack(">IIII", fimg.read(16))
-	img = pyarray("B", fimg.read())
-	fimg.close()
-
-	ind = [ k for k in range(size) if lbl[k] in digits ]
-	N = len(ind)
-
-	images = zeros((N, rows, cols), dtype=uint8)
-	labels = zeros((N, 1), dtype=int8)
-	for i in range(len(ind)):
-		images[i] = np.array(img[ind[i]*rows*cols : (ind[i]+1)*rows*cols ]).reshape((rows, cols))
-		labels[i] = lbl[ind[i]]
-
-		# im = np.array([np.tile(images[i], (1, 1)) for j in xrange(3)])
-		# aux = misc.toimage(im)
-		# aux = misc.toimage(images[i])
-		#
-		# name = "/home/olaia.artieda/TFM/DATASETS/MNIST/" + dataset + "/" + str(labels[i, 0]) + "/" + str(i) + ".png"
-		# aux.save(name)
-
-	return images, labels
-
-
-def load_images(path):
-	folders = os.listdir(path)
-	txt_file = open('./data/triplets/curves.txt', 'w')
-
-	num_images = 0
-	images = []
-	labels = []
-
-	for folder in folders:
-		class_path = path + folder + '/'
-		class_images = os.listdir(class_path)
-
-		for image in class_images:
-			txt_file.write(class_path + image + ' ' + str(folder) + '\n')
-
-			image = imread(class_path + image)
-			images.append(image)
-			labels.append(folder)
-
-			num_images += 1
-
-	txt_file.close()
-
-	return txt_file, images, labels
-
-
-def unpickle(file):
-	fo = open(file, 'rb')
-	dict = cPickle.load(fo)
-	fo.close()
-	return dict
-
-
-def load_cifar10(dataset_path, aux):
-	images = []
-	norm_images = []
-	labels = []
-
-	image_size = 32
-	mean_image = np.zeros((image_size, image_size, 3))
-	mean = []
-
-	# nearest neighbors
-	testing_labels = 0
-	testing_images = []
-
-	if aux == 'training':
-		for i in range(1, 6, 1):
-			dict = unpickle(dataset_path + 'data_batch_' + str(i))
-
-			num_images = dict['data'].shape[0]
-			for ii in range(num_images):
-				img = dict['data'][ii].reshape((3, image_size, image_size))
-				label = dict['labels'][ii]
-				rgb_img = ndarray.transpose(img, (2, 1, 0))
-				# image = misc.toimage(rgb_img)
-				# image = image.rotate(-90)
-				# image.save(dataset_path + aux + '/' + str(label) + '/' + str(ii) + '.png')
-				images.append(rgb_img)
-				labels.append(label)
-
-				# Create mean image
-				mean_image[:, :, 0] += rgb_img[:, :, 0]
-				mean_image[:, :, 1] += rgb_img[:, :, 1]
-				mean_image[:, :, 2] += rgb_img[:, :, 2]
-
-			mean.append(mean_image / ii*i)
-
-	elif aux == 'testing':
-		dict = unpickle(dataset_path + 'test_batch')
-		num_images = dict['data'].shape[0]
-		for ii in range(num_images):
-			img = dict['data'][ii].reshape((3, image_size, image_size))
-			label = dict['labels'][ii]
-			rgb_img = ndarray.transpose(img, (2, 1, 0))
-			# image = misc.toimage(rgb_img)
-			# image = image.rotate(-90)
-			# image.save(dataset_path + aux + '/' + str(label) + '/' + str(ii) + '.png')
-			images.append(rgb_img)
-			labels.append(label)
-
-			# Create mean image
-			mean_image[:, :, 0] += rgb_img[:, :, 0]
-			mean_image[:, :, 1] += rgb_img[:, :, 1]
-			mean_image[:, :, 2] += rgb_img[:, :, 2]
-
-		mean.append(mean_image / ii)
-
-	return images, labels, mean
-
-
 def save_images_txt(path, file_path):
 	folders = os.listdir(path)
 	txt_file = open(file_path, 'w')
@@ -378,125 +253,60 @@ def save_images_txt(path, file_path):
 	return txt_file
 
 
-def modifyTrainTestFile(const, alpha_param, feats):
-	if const == 'mnist':
-		file_path = './data/' + const + '_train_test.prototxt'
-		f = open(file_path, 'r')
-		contents = f.readlines()
-		f.close()
+def changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path):
+	f = open(file_path, 'r')
+	contents = f.readlines()
+	f.close()
 
-		# Alpha margin
-		index = 605
-		value = "    param_str: " + '"' + "'" + "num" + "': " + str(alpha_param) + '"' + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		# Features
-		index = 241
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 398
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 555
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
+	# Alpha margin
+	value = "    margin: " + str(alpha_param) + "\n"
+	contents.insert(index1, value)
+	contents.pop(index1 + 1)
 
-		f = open(file_path, 'w')
-		contents = "".join(contents)
-		f.write(contents)
-		f.close()
+	# Features
+	value = "    num_output: " + str(feats) + "\n"
+	contents.insert(index2, value)
+	contents.pop(index2 + 1)
+	value = "    num_output: " + str(feats) + "\n"
+	contents.insert(index3, value)
+	contents.pop(index3 + 1)
+	value = "    num_output: " + str(feats) + "\n"
+	contents.insert(index4, value)
+	contents.pop(index4 + 1)
 
-		#############################################################################3
+	f = open(file_path, 'w')
+	contents = "".join(contents)
+	f.write(contents)
+	f.close()
 
-		file_path = './data/' + const + '_net_curves.prototxt'
-		f = open(file_path, 'r')
-		contents = f.readlines()
-		f.close()
 
-		# Alpha margin
-		index = 605
-		value = "    param_str: " + '"' + "'" + "num" + "': " + str(alpha_param) + '"' + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		# Features
-		index = 241
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 398
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 555
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
+def modifyTrainTestFile(dataset, network, alpha_param, feats):
+	if dataset == 'mnist' and network == 'lenet':
+		index1 = 605
+		index2 = 241
+		index3 = 398
+		index4 = 555
+		file_path = './data/' + network + '_' + dataset + '_train_test.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
+		file_path = './data/' + network + '_' + dataset + '_net_curves.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
 
-		f = open(file_path, 'w')
-		contents = "".join(contents)
-		f.write(contents)
-		f.close()
+	elif dataset == 'cifar10' and network == 'lenet':
+		index1 = 605
+		index2 = 241
+		index3 = 398
+		index4 = 555
+		file_path = './data/' + network + '_' + dataset + '_train_test.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
+		file_path = './data/' + network + '_' + dataset + '_net_curves.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
 
-	elif const == 'cifar10':
-		file_path = './data/' + const + '_train_test.prototxt'
-		f = open(file_path, 'r')
-		contents = f.readlines()
-		f.close()
-
-		# Alpha margin
-		index = 605
-		value = "    param_str: " + '"' + "'" + "num" + "': " + str(alpha_param) + '"' + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		# Features
-		index = 241
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 398
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 555
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-
-		f = open(file_path, 'w')
-		contents = "".join(contents)
-		f.write(contents)
-		f.close()
-
-		#############################################################################3
-
-		file_path = './data/' + const + '_net_curves.prototxt'
-		f = open(file_path, 'r')
-		contents = f.readlines()
-		f.close()
-
-		# Alpha margin
-		index = 605
-		value = "    param_str: " + '"' + "'" + "num" + "': " + str(alpha_param) + '"' + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		# Features
-		index = 241
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 398
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-		index = 555
-		value = "    num_output: " + str(feats) + "\n"
-		contents.insert(index, value)
-		contents.pop(index + 1)
-
-		f = open(file_path, 'w')
-		contents = "".join(contents)
-		f.write(contents)
-		f.close()
+	elif dataset == 'cifar10' and network == 'caffenet':
+		index1 = 605
+		index2 = 241
+		index3 = 398
+		index4 = 555
+		file_path = './data/' + network + '_' + dataset + '_train_test.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
+		file_path = './data/' + network + '_' + dataset + '_net_curves.prototxt'
+		changeMarginFeats(alpha_param, feats, index1, index2, index3, index4, file_path)
